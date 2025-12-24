@@ -1,10 +1,5 @@
-<#
-	Integrated Setup Script
-	Combines all individual scripts with ordering, auto-elevation, compatibility checks,
-	parallel winget installs, UI automation, privacy, registry, DISM removals, and app configs.
-#>
 
-# region Elevation and globals -------------------------------------------------
+# Elevation and globals -------------------------------------------------
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
 	if ($PSCommandPath) {
 		Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
@@ -28,7 +23,7 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 
-# region Helpers --------------------------------------------------------------
+# Helpers --------------------------------------------------------------
 function Get-UIAElement {
 	param(
 		[System.Windows.Automation.AutomationElement]$Root,
@@ -138,7 +133,7 @@ function Wait-JobWithOutput {
 	}
 }
 
-# region Functions ------------------------------------------------------------
+# Functions ------------------------------------------------------------
 function Set-WindowsTheme {
 	Write-ProgressLog "Applying theme Glow and accent Blue"
 	Start-Process "ms-settings:themes"
@@ -801,7 +796,7 @@ function Set-NightLight {
 	Close-SettingsWindow -Window $settingsWindow
 }
 
-# region Execution order ------------------------------------------------------
+# Execution order ------------------------------------------------------
 try {
 	Invoke-MinimizeAllWindows
 	Set-WindowsTheme
