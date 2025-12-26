@@ -134,23 +134,124 @@ function Wait-JobWithOutput {
 }
 
 # Functions ------------------------------------------------------------
+function Set-LockScreen {
+
+    $lockScreenImage = "C:\Windows\Web\Screen\img102.jpg"
+    if (-not (Test-Path $lockScreenImage)) {
+        Write-Warning "Lock screen image not found: $lockScreenImage"
+        return
+    }
+
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+
+    $cdmPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+    $cdmSubscriptionFlag = "SubscribedContent-338387Enabled"
+    $creativePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI\Creative\$sid"
+    $personalizationPolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
+    $personalizationPolicyUser = "HKCU:\Software\Policies\Microsoft\Windows\Personalization"
+    $cloudPolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
+    $personalizationCsp = "HKCU:\Software\Microsoft\Windows\CurrentVersion\PersonalizationCSP"
+    $personalizationCspMachine = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP"
+
+    New-Item -Path $cdmPath -Force | Out-Null
+    New-Item -Path $creativePath -Force | Out-Null
+    New-Item -Path $personalizationPolicy -Force | Out-Null
+    New-Item -Path $personalizationPolicyUser -Force | Out-Null
+    New-Item -Path $cloudPolicy -Force | Out-Null
+    New-Item -Path $personalizationCsp -Force | Out-Null
+    New-Item -Path $personalizationCspMachine -Force | Out-Null
+
+    # Turn off Windows Spotlight and lock screen tips
+    Set-ItemProperty -Path $cdmPath -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord
+    Set-ItemProperty -Path $cdmPath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord
+    Set-ItemProperty -Path $cdmPath -Name $cdmSubscriptionFlag -Value 0 -Type DWord
+    Set-ItemProperty -Path $creativePath -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord
+    Set-ItemProperty -Path $creativePath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord
+
+    # Enforce picture lock screen and supply the image path
+    Set-ItemProperty -Path $personalizationPolicy -Name "LockScreenImage" -Value $lockScreenImage -Type String
+    Set-ItemProperty -Path $personalizationPolicyUser -Name "LockScreenImage" -Value $lockScreenImage -Type String
+    Set-ItemProperty -Path $personalizationPolicy -Name "NoLockScreenSlideshow" -Value 1 -Type DWord
+    Set-ItemProperty -Path $personalizationPolicyUser -Name "NoLockScreenSlideshow" -Value 1 -Type DWord
+    Set-ItemProperty -Path $cloudPolicy -Name "DisableWindowsSpotlightOnLockScreen" -Value 1 -Type DWord
+    Set-ItemProperty -Path $cloudPolicy -Name "DisableWindowsSpotlightFeatures" -Value 1 -Type DWord
+
+    # Mirror path in user-scoped personalization to nudge shell to reload
+    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImagePath" -Value $lockScreenImage -Type String
+    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImageUrl" -Value $lockScreenImage -Type String
+    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImageStatus" -Value 1 -Type DWord
+    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImageOptions" -Value 0 -Type DWord
+    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImagePath" -Value $lockScreenImage -Type String
+    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImageUrl" -Value $lockScreenImage -Type String
+    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImageStatus" -Value 1 -Type DWord
+    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImageOptions" -Value 0 -Type DWord
+
+    & rundll32.exe user32.dll,UpdatePerUserSystemParameters 1, True | Out-Null
+    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+}
+
 function Set-WindowsTheme {
-	Write-ProgressLog "Applying theme Glow and accent Blue"
-	Start-Process "ms-settings:themes"
-	Start-Sleep -Seconds 2
-	$desktop = [System.Windows.Automation.AutomationElement]::RootElement
-	$settings = Get-UIAElement -Root $desktop -Name 'Settings' -TimeoutSeconds 10
-	if (-not $settings) { Write-ProgressLog "Settings window not found" 'WARN'; return }
-	$themeElement = Get-UIAElement -Root $settings -Name 'Glow, 4 images'
-	if ($themeElement) { Invoke-UIAElement -Element $themeElement }
-	Start-Sleep -Seconds 1
-	$colorBtn = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Personalize_Themes_Color_Button'
-	if ($colorBtn) { Invoke-UIAElement -Element $colorBtn; Start-Sleep -Seconds 1 } else { Write-ProgressLog "Color button not found" 'WARN'; return }
-	$settings = Get-UIAElement -Root $desktop -Name 'Settings'
-	$blue = Get-UIAElement -Root $settings -Name 'Blue'
-	if ($blue) { Invoke-UIAElement -Element $blue }
-	Close-SettingsWindow -Window $settings
-	Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
+
+    # Values captured from the SystemSettings trace
+    $accentColor = 4292114432
+    $startColorMenu = 4290799360
+    $colorizationColor = 3288365268
+    $colorizationColorBalance = 89
+    $colorizationAfterglowBalance = 10
+    $colorizationBlurBalance = 1
+    $accentPalette = [byte[]](0x99,0xEB,0xFF,0x00,0x4C,0xC2,0xFF,0x00,0x00,0x91,0xF8,0x00,0x00,0x78,0xD4,0x00)
+    $themeAPath = Join-Path $env:WINDIR "Resources\Themes\themeA.theme"
+
+    $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
+    $accentPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent"
+    $themeHistoryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\History"
+    $personalizePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+    $themesRoot = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes"
+
+    New-Item -Path $dwmPath -Force | Out-Null
+    New-Item -Path $accentPath -Force | Out-Null
+    New-Item -Path $themeHistoryPath -Force | Out-Null
+    New-Item -Path $personalizePath -Force | Out-Null
+    New-Item -Path $themesRoot -Force | Out-Null
+
+    # Apply Glow (ThemeA) before other tweaks
+    if (Test-Path $themeAPath) {
+        Start-Process -FilePath $themeAPath -Wait
+        Set-ItemProperty -Path $themesRoot -Name "CurrentTheme" -Value $themeAPath -Type String
+        Set-ItemProperty -Path $themesRoot -Name "ThemeMRU" -Value "$themeAPath;" -Type String
+    } else {
+        Write-Warning "Theme file not found: $themeAPath"
+    }
+
+    Set-ItemProperty -Path $dwmPath -Name "AccentColor" -Value $accentColor -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorizationColor" -Value $colorizationColor -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorizationColorBalance" -Value $colorizationColorBalance -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorizationAfterglow" -Value $colorizationColor -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorizationAfterglowBalance" -Value $colorizationAfterglowBalance -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorizationBlurBalance" -Value $colorizationBlurBalance -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "EnableWindowColorization" -Value 1 -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorizationGlassAttribute" -Value 1 -Type DWord
+
+    Set-ItemProperty -Path $accentPath -Name "AccentColorMenu" -Value $accentColor -Type DWord
+    Set-ItemProperty -Path $accentPath -Name "StartColorMenu" -Value $startColorMenu -Type DWord
+    Set-ItemProperty -Path $accentPath -Name "AccentPalette" -Value $accentPalette -Type Binary
+
+    Set-ItemProperty -Path $themeHistoryPath -Name "AutoColor" -Value 0 -Type DWord
+
+    # Keep Start menu, taskbar, and title bars using system defaults
+    Set-ItemProperty -Path $personalizePath -Name "ColorPrevalence" -Value 0 -Type DWord
+    Set-ItemProperty -Path $dwmPath -Name "ColorPrevalence" -Value 0 -Type DWord
+
+    # Force dark mode for system and apps
+    Set-ItemProperty -Path $personalizePath -Name "AppsUseLightTheme" -Value 0 -Type DWord
+    Set-ItemProperty -Path $personalizePath -Name "SystemUsesLightTheme" -Value 0 -Type DWord
+
+    Set-LockScreen
+
+    # Nudge the shell to apply the new accent without requiring a sign-out
+    & rundll32.exe user32.dll,UpdatePerUserSystemParameters 1, True | Out-Null
+    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
 }
 
 function Set-PrivacySettings {
@@ -405,6 +506,7 @@ function Set-PrivacySettings {
 	M028	+	# Disable the desktop icon for information on "Windows Spotlight" (Category: Miscellaneous)
 	N001	-	# Disable Network Connectivity Status Indicator (Category: Miscellaneous)
 '@
+
 	Set-Content -Path $ooCfg -Value $ooConfigContent -Encoding UTF8
 	try {
 		$ProgressPreference = 'SilentlyContinue'
@@ -456,9 +558,6 @@ function Set-RegistryTweaks {
 	try { Set-ExecutionPolicy Unrestricted -Force -ErrorAction Stop } catch {}
 	# Alt+Tab tabs off
 	Set-RegistryValueSafe -Path $ExplorerAdvanced -Name 'MultiTaskingAltTabFilter' -Value 3
-	# Set Hibernate timeout
-	powercfg /change hibernate-timeout-ac 1
-	powercfg /change hibernate-timeout-dc 1
 	# Taskbar auto-hide
 	try { &{ $p='HKCU:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3';$v=(Get-ItemProperty -Path $p).Settings;$v[8]=3;&Set-ItemProperty -Path $p -Name Settings -Value $v;&Stop-Process -f -ProcessName explorer } } catch { Write-ProgressLog "Taskbar auto-hide failed: $_" 'WARN' }
 	# End task on taskbar
@@ -539,30 +638,30 @@ function Set-RegistryTweaks {
 		$jsonPath = "$tempDir\winutil_config.json"
 		$runnerPath = "$tempDir\winutil_direct_runner.ps1"
 		$jsonContent = @"
-{
-	"WPFTweaks":  [
-					  "WPFTweaksWifi",
-					  "WPFTweaksServices",
-					  "WPFToggleBingSearch",
-					  "WPFToggleTaskbarSearch",
-					  "WPFToggleTaskView",
-					  "WPFToggleTaskbarWidgets",
-					  "WPFTweaksConsumerFeatures",
-					  "WPFTweaksTele",
-					  "WPFTweaksRemoveGallery",
-					  "WPFTweaksEndTaskOnTaskbar",
-					  "WPFTweaksRemoveCopilot",
-					  "WPFTweaksLaptopHibernation",
-					  "WPFTweaksRecallOff"
-				  ],
-	"Install":  [],
-	"WPFInstall": [],
-	"WPFFeature": [
-					   "WPFFeaturesSandbox",
-					   "WPFFeaturewsl"
-				   ]
-}
-"@
+	{
+		"WPFTweaks":  [
+						"WPFTweaksWifi",
+						"WPFTweaksServices",
+						"WPFToggleBingSearch",
+						"WPFToggleTaskbarSearch",
+						"WPFToggleTaskView",
+						"WPFToggleTaskbarWidgets",
+						"WPFTweaksConsumerFeatures",
+						"WPFTweaksTele",
+						"WPFTweaksRemoveGallery",
+						"WPFTweaksEndTaskOnTaskbar",
+						"WPFTweaksRemoveCopilot",
+						"WPFTweaksLaptopHibernation",
+						"WPFTweaksRecallOff"
+					],
+		"Install":  [],
+		"WPFInstall": [],
+		"WPFFeature": [
+						"WPFFeaturesSandbox",
+						"WPFFeaturewsl"
+					]
+	}
+	"@
 		Set-Content -Path $jsonPath -Value $jsonContent -Encoding UTF8
 		$runnerContent = @"
 		`$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -597,6 +696,98 @@ function Set-RegistryTweaks {
 		if (Test-Path $jsonPath) { Remove-Item $jsonPath -Force }
 		if (Test-Path $runnerPath) { Remove-Item $runnerPath -Force }
 	}
+}
+
+function Set-PowerSleepPolicy {
+
+    function Test-PowerCfgSetting {
+        param(
+            [string]$Scheme,
+            [string]$SubGroup,
+            [string]$Setting
+        )
+
+        powercfg /query $Scheme $SubGroup $Setting 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+
+    function Set-PowerCfgPair {
+        param(
+            [string]$Scheme,
+            [string]$SubGroup,
+            [string]$Setting,
+            [int]$AcValue,
+            [int]$DcValue,
+            [string]$Label
+        )
+
+        Write-Host "  - $Label..." -NoNewline
+        if (-not (Test-PowerCfgSetting -Scheme $Scheme -SubGroup $SubGroup -Setting $Setting)) {
+            Write-Host " Skipped (setting unavailable on this device)." -ForegroundColor DarkYellow
+            return
+        }
+
+        powercfg /setacvalueindex $Scheme $SubGroup $Setting $AcValue
+        powercfg /setdcvalueindex $Scheme $SubGroup $Setting $DcValue
+        Write-Host " Done." -ForegroundColor Green
+    }
+
+    Write-Host "--- Starting Power Configuration Update ---" -ForegroundColor Cyan
+
+    # Universal GUIDs (Constants across Windows)
+    $SUB_SLEEP     = "238c9fa8-0aad-41ed-83f4-97be242c8f20"
+    $SLEEP_IDLE    = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da" # Sleep after
+    $HIBERNATE_IDLE = "9d7815a6-7ee4-497e-8888-515a05f02364" # Hibernate after
+    $SUB_VIDEO     = "7516b95f-f776-4464-8c53-06167f40cc99"  # Display
+    $VIDEO_IDLE    = "3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e"  # Display off
+    
+    $SUB_BUTTONS   = "4f971e89-eebd-4455-a8de-9e59040e7347"
+    $LID_ACTION    = "5ca79f8d-77f6-4ef5-99ee-727262a32715" # Lid close
+    $PWR_ACTION    = "7648efa3-dd9c-4e3e-b566-50f929386280" # Power button
+
+    # 1. Remove Sleep from the Power Menu via Registry
+    Write-Host "Removing Sleep from Power Menu..." -NoNewline
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FlyoutMenuSettings"
+    if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+    Set-ItemProperty -Path $regPath -Name "ShowSleepOption" -Value 0
+    Write-Host " Done." -ForegroundColor Green
+
+    # Target timeouts (seconds)
+    $displayTimeoutAc = 120   # 2 minutes
+    $sleepTimeoutAc   = 600   # 10 minutes
+    $hibernateAc      = 600   # 10 minutes
+
+    $displayTimeoutDc = 120   # 2 minutes
+    $sleepTimeoutDc   = 300   # 5 minutes
+    $hibernateDc      = 300   # 5 minutes
+
+    # 2. Get all Power Schemes
+    $schemes = powercfg /list | Select-String -Pattern 'GUID: ([\da-f-]+)' | ForEach-Object { $_.Matches.Groups[1].Value }
+
+    foreach ($scheme in $schemes) {
+        Write-Host "Processing Scheme: $scheme" -ForegroundColor Yellow
+
+        # Display off after 2 minutes on AC/DC
+        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_VIDEO -Setting $VIDEO_IDLE -AcValue $displayTimeoutAc -DcValue $displayTimeoutDc -Label "Setting display off ($displayTimeoutAc AC / $displayTimeoutDc DC)"
+
+        # Sleep after 10 minutes (AC) / 5 minutes (DC)
+        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_SLEEP -Setting $SLEEP_IDLE -AcValue $sleepTimeoutAc -DcValue $sleepTimeoutDc -Label "Setting sleep after ($sleepTimeoutAc AC / $sleepTimeoutDc DC)"
+
+        # Hibernate after 11 minutes (AC) / 6 minutes (DC)
+        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_SLEEP -Setting $HIBERNATE_IDLE -AcValue $hibernateAc -DcValue $hibernateDc -Label "Setting hibernate after ($hibernateAc AC / $hibernateDc DC)"
+
+        # Lid close: Do nothing
+        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_BUTTONS -Setting $LID_ACTION -AcValue 0 -DcValue 0 -Label "Setting Lid to 'Do Nothing'"
+
+        # Power button: Hibernate
+        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_BUTTONS -Setting $PWR_ACTION -AcValue 2 -DcValue 2 -Label "Setting Power Button to 'Hibernate'"
+    }
+
+    # Refresh current scheme to apply changes
+    $activeScheme = (powercfg /getactivescheme) -replace ".*GUID: ([\da-f-]+).*", '$1'
+    powercfg /setactive $activeScheme
+
+    Write-Host "--- Operation Complete ---" -ForegroundColor Cyan
 }
 
 function Install-WingetPackages {
@@ -801,18 +992,19 @@ function Set-NightLight {
 try {
 	Invoke-MinimizeAllWindows
 	Set-WindowsTheme
-	Set-PrivacySettings
-	Set-RegistryTweaks
-	Install-WingetPackages
-	Set-VSCodeContext
-	Set-PowerToysConfig
-	Set-StartupApps
-	Close-SettingsWindow -Window (Get-UIAElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Name 'Settings' -TimeoutSeconds 2)
-	Set-DynamicRefresh
-	Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
-	Set-NightLight
-	Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
-	Write-ProgressLog "Setup complete" 'DONE'
+	# Set-PrivacySettings
+	# Set-RegistryTweaks
+	# Install-WingetPackages
+	# Set-PowerSleepPolicy
+	# Set-VSCodeContext
+	# Set-PowerToysConfig
+	# Set-StartupApps
+	# Close-SettingsWindow -Window (Get-UIAElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Name 'Settings' -TimeoutSeconds 2)
+	# Set-DynamicRefresh
+	# Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
+	# Set-NightLight
+	# Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
+	# Write-ProgressLog "Setup complete" 'DONE'
 
     # Wait for user confirmation before closing
     Write-Host "Press enter to exit..."
