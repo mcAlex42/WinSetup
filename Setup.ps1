@@ -456,8 +456,9 @@ function Set-RegistryTweaks {
 	try { Set-ExecutionPolicy Unrestricted -Force -ErrorAction Stop } catch {}
 	# Alt+Tab tabs off
 	Set-RegistryValueSafe -Path $ExplorerAdvanced -Name 'MultiTaskingAltTabFilter' -Value 3
-	# S3 sleep state
-	Set-RegistryValueSafe -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' -Name 'PlatformAoAcOverride' -Value 0
+	# Set Hibernate timeout
+	powercfg /change hibernate-timeout-ac 1
+	powercfg /change hibernate-timeout-dc 1
 	# Taskbar auto-hide
 	try { &{ $p='HKCU:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3';$v=(Get-ItemProperty -Path $p).Settings;$v[8]=3;&Set-ItemProperty -Path $p -Name Settings -Value $v;&Stop-Process -f -ProcessName explorer } } catch { Write-ProgressLog "Taskbar auto-hide failed: $_" 'WARN' }
 	# End task on taskbar
