@@ -136,6 +136,8 @@ function Wait-JobWithOutput {
 # Functions ------------------------------------------------------------
 function Set-LockScreen {
 
+	Write-ProgressLog "Setting lock screen"
+
     $lockScreenImage = "C:\Windows\Web\Screen\img102.jpg"
     if (-not (Test-Path $lockScreenImage)) {
         Write-Warning "Lock screen image not found: $lockScreenImage"
@@ -191,6 +193,8 @@ function Set-LockScreen {
 }
 
 function Set-WindowsTheme {
+
+	Write-ProgressLog "Setting windows theme"
 
     # Values captured from the SystemSettings trace
     $accentColor = 4292114432
@@ -520,6 +524,52 @@ function Set-PrivacySettings {
 	}
 }
 
+function Set-LocationServices {
+	Write-ProgressLog "Setting location services"
+	Start-Process "ms-settings:privacy-location"
+	$root = [System.Windows.Automation.AutomationElement]::RootElement
+	$settings = Get-UIAElement -Root $root -Name "Settings"
+	if ($settings) {
+		$toggle = Get-UIAElement -Root $settings -AutomationId "DialogToggle" -Name "Location services"
+		if ($toggle) {
+			$togglePattern = $null
+			if ($toggle.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+				if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+					Invoke-UIAElement -Element $toggle
+					Start-Sleep -Milliseconds 500
+				}
+			}
+		}
+		Close-SettingsWindow -Window $settings
+	}
+}
+
+function Set-DateTime {
+	Write-ProgressLog "Setting date and time"
+	Start-Process "ms-settings:dateandtime"
+	$root = [System.Windows.Automation.AutomationElement]::RootElement
+	$settings = Get-UIAElement -Root $root -Name "Settings"
+	if ($settings) {
+		$toggles = @(
+			"SystemSettings_DateTime_IsTimeSetAutomaticallyEnabled_ToggleSwitch",
+			"SystemSettings_DateTime_IsTimeZoneSetAutomaticallyEnabled_ToggleSwitch"
+		)
+		foreach ($id in $toggles) {
+			$toggle = Get-UIAElement -Root $settings -AutomationId $id
+			if ($toggle) {
+				$togglePattern = $null
+				if ($toggle.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+					if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+						Invoke-UIAElement -Element $toggle
+						Start-Sleep -Milliseconds 500
+					}
+				}
+			}
+		}
+		Close-SettingsWindow -Window $settings
+	}
+}
+
 function Set-RegistryTweaks {
 	Write-ProgressLog "Applying registry and system tweaks"
 	# Theme color prevalence off
@@ -707,8 +757,13 @@ function Set-PowerSleepPolicy {
             [string]$Setting
         )
 
-        powercfg /query $Scheme $SubGroup $Setting 2>$null | Out-Null
-        return $LASTEXITCODE -eq 0
+        try {
+            $result = powercfg /query $Scheme $SubGroup $Setting 2>&1
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            return $false
+        }
     }
 
     function Set-PowerCfgPair {
@@ -721,18 +776,18 @@ function Set-PowerSleepPolicy {
             [string]$Label
         )
 
-        Write-Host "  - $Label..." -NoNewline
+        Write-ProgressLog "  - $Label..." -NoNewline
         if (-not (Test-PowerCfgSetting -Scheme $Scheme -SubGroup $SubGroup -Setting $Setting)) {
-            Write-Host " Skipped (setting unavailable on this device)." -ForegroundColor DarkYellow
+            Write-ProgressLog " Skipped (setting unavailable on this device)."
             return
         }
 
         powercfg /setacvalueindex $Scheme $SubGroup $Setting $AcValue
         powercfg /setdcvalueindex $Scheme $SubGroup $Setting $DcValue
-        Write-Host " Done." -ForegroundColor Green
+        Write-ProgressLog " Done."
     }
 
-    Write-Host "--- Starting Power Configuration Update ---" -ForegroundColor Cyan
+    Write-ProgressLog "Setting power and sleep policies"
 
     # Universal GUIDs (Constants across Windows)
     $SUB_SLEEP     = "238c9fa8-0aad-41ed-83f4-97be242c8f20"
@@ -746,11 +801,9 @@ function Set-PowerSleepPolicy {
     $PWR_ACTION    = "7648efa3-dd9c-4e3e-b566-50f929386280" # Power button
 
     # 1. Remove Sleep from the Power Menu via Registry
-    Write-Host "Removing Sleep from Power Menu..." -NoNewline
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FlyoutMenuSettings"
     if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
     Set-ItemProperty -Path $regPath -Name "ShowSleepOption" -Value 0
-    Write-Host " Done." -ForegroundColor Green
 
     # Target timeouts (seconds)
     $displayTimeoutAc = 120   # 2 minutes
@@ -787,7 +840,6 @@ function Set-PowerSleepPolicy {
     $activeScheme = (powercfg /getactivescheme) -replace ".*GUID: ([\da-f-]+).*", '$1'
     powercfg /setactive $activeScheme
 
-    Write-Host "--- Operation Complete ---" -ForegroundColor Cyan
 }
 
 function Install-WingetPackages {
@@ -923,93 +975,124 @@ function Set-StartupApps {
 	Set-RegistryValueLocal -Path 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' -Name 'Everything' -Type Binary -Value $binDataEverything
 }
 
-function Set-DynamicRefresh {
-	Write-ProgressLog "Setting dynamic refresh"
-	Start-Process 'ms-settings:display'; Start-Sleep -Seconds 3
-	$desktop = [System.Windows.Automation.AutomationElement]::RootElement
-	$settingsWindowCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'ApplicationFrameWindow')
-	$settingsWindow = $null
-	for ($i=0; $i -lt 10; $i++) {
-		$candidates = $desktop.FindAll([System.Windows.Automation.TreeScope]::Children, $settingsWindowCondition)
-		foreach ($window in $candidates) { if ($window.Current.Name -eq 'Settings') { $settingsWindow = $window; break } }
-		if ($settingsWindow) { break }
-		Start-Sleep -Seconds 1
-	}
-	if (-not $settingsWindow) { Write-ProgressLog 'Settings window not found for display' 'WARN'; return }
-	$advContainer = Get-UIAElement -Root $settingsWindow -AutomationId 'SystemSettings_Display_AdvancedDisplaySettings_ButtonEntityItem'
-	if ($advContainer) {
-		try { ($advContainer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)).ScrollIntoView() } catch {}
-		$buttonCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)
-		$childButton = $advContainer.FindFirst([System.Windows.Automation.TreeScope]::Children,$buttonCondition)
-		if ($childButton) { Invoke-UIAElement -Element $childButton } else { try { $advContainer.SetFocus(); [System.Windows.Forms.SendKeys]::SendWait('{TAB}'); [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') } catch {} }
-		Start-Sleep -Seconds 2
-	} else { Write-ProgressLog "Advanced Display container not found" 'WARN'; return }
-	$comboBox = Get-UIAElement -Root $settingsWindow -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsRefreshRate_ComboBox'
-	if ($comboBox) {
-		try {
-			$comboBox.SetFocus(); Start-Sleep -Milliseconds 500; [System.Windows.Forms.SendKeys]::SendWait(' '); Start-Sleep -Milliseconds 300; for ($i=1;$i -le 3;$i++){[System.Windows.Forms.SendKeys]::SendWait('{UP}');Start-Sleep -Milliseconds 50}; [System.Windows.Forms.SendKeys]::SendWait(' ')
-		} catch { Write-ProgressLog "Refresh combo interaction failed: $_" 'WARN' }
-	}
-	Start-Sleep -Seconds 2
-	$primaryButton = Get-UIAElement -Root $settingsWindow -AutomationId 'PrimaryButton' -TimeoutSeconds 3
-	if ($primaryButton) { Invoke-UIAElement -Element $primaryButton; Start-Sleep -Seconds 1 }
-	$toggleSwitch = Get-UIAElement -Root $settingsWindow -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsDynamicRefreshRate_ToggleSwitch'
-	if ($toggleSwitch) { Invoke-UIAElement -Element $toggleSwitch }
-	Close-SettingsWindow -Window $settingsWindow
-}
-
 function Set-NightLight {
 	Write-ProgressLog "Setting night light"
 	Start-Process 'ms-settings:nightlight'
-	Start-Sleep -Seconds 2
-	$desktop = [System.Windows.Automation.AutomationElement]::RootElement
-	$settingsWindowCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty,'ApplicationFrameWindow')
-	$settingsWindow = $null
-	for ($i=0; $i -lt 10; $i++) {
-		$candidates = $desktop.FindAll([System.Windows.Automation.TreeScope]::Children,$settingsWindowCondition)
-		foreach ($window in $candidates) { if ($window.Current.Name -eq 'Settings') { $settingsWindow = $window; break } }
-		if ($settingsWindow) { break }
-		Start-Sleep -Seconds 1
+	$root = [System.Windows.Automation.AutomationElement]::RootElement
+	$settings = Get-UIAElement -Root $root -Name "Settings"
+	if ($settings) {
+		$slider = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_BlueLight_ColorTemperature_Slider'
+		if ($slider) {
+			try {
+				$rangeValuePattern = $null
+				if ($slider.TryGetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern, [ref]$rangeValuePattern)) {
+					$rangeValuePattern.SetValue(80)
+				}
+			} catch { Write-ProgressLog "Night light slider failed: $_" 'WARN' }
+		}
+		$toggleSwitch = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_BlueLight_AutomaticOnSchedule_ToggleSwitch'
+		if ($toggleSwitch) {
+			try {
+				$togglePattern = $null
+				if ($toggleSwitch.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+					if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+						$togglePattern.Toggle()
+						Start-Sleep -Milliseconds 500
+					}
+				}
+			} catch { Write-ProgressLog "Night light toggle failed: $_" 'WARN' }
+		}
+		Close-SettingsWindow -Window $settings
 	}
-	if (-not $settingsWindow) { Write-ProgressLog 'Settings window not found for night light' 'WARN'; return }
-	$slider = Get-UIAElement -Root $settingsWindow -AutomationId 'SystemSettings_Display_BlueLight_ColorTemperature_Slider'
-	if ($slider) {
-		try {
-			$slider.SetFocus(); Start-Sleep -Milliseconds 100; for ($i=1;$i -le 100;$i++){[System.Windows.Forms.SendKeys]::SendWait('{RIGHT}');Start-Sleep -Milliseconds 1}; for ($i=1;$i -le 20;$i++){[System.Windows.Forms.SendKeys]::SendWait('{LEFT}');Start-Sleep -Milliseconds 1}
-		} catch { Write-ProgressLog "Night light slider failed: $_" 'WARN' }
+}
+
+function Set-DynamicRefresh {
+	Write-ProgressLog "Setting dynamic refresh"
+	Start-Process 'ms-settings:display'
+	$root = [System.Windows.Automation.AutomationElement]::RootElement
+	$settings = Get-UIAElement -Root $root -Name "Settings"
+	if ($settings) {
+		$advContainer = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettings_ButtonEntityItem'
+		if ($advContainer) {
+			try { ($advContainer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)).ScrollIntoView() } catch {}
+			$buttonCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)
+			$childButton = $advContainer.FindFirst([System.Windows.Automation.TreeScope]::Children,$buttonCondition)
+			if ($childButton) { Invoke-UIAElement -Element $childButton } else { try { $advContainer.SetFocus(); [System.Windows.Forms.SendKeys]::SendWait('{TAB}'); [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') } catch {} }
+		} else { Write-ProgressLog "Advanced Display container not found" 'WARN'; Close-SettingsWindow -Window $settings; return }
+		
+		$comboBox = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsRefreshRate_ComboBox'
+		if ($comboBox) {
+			try {
+				$expandPattern = $null
+				if ($comboBox.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$expandPattern)) {
+					$expandPattern.Expand()
+					Start-Sleep -Milliseconds 500
+					$listItems = $comboBox.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::ListItem }
+					if ($listItems.Count -gt 0) {
+						$highestItem = $null
+						$highestValue = -1
+						foreach ($item in $listItems) {
+							if ($item.Current.Name -match '(\d+(\.\d+)?)') {
+								$val = [double]$matches[1]
+								if ($val -gt $highestValue) {
+									$highestValue = $val
+									$highestItem = $item
+								}
+							}
+						}
+						if ($highestItem) {
+							Write-ProgressLog "Selecting refresh rate: $($highestItem.Current.Name)"
+							$selectPattern = $null
+							if ($highestItem.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selectPattern)) {
+								$selectPattern.Select()
+								Start-Sleep -Milliseconds 500
+							}
+						}
+					}
+				}
+			} catch { Write-ProgressLog "Refresh combo interaction failed: $_" 'WARN' }
+		}
+		$primaryButton = Get-UIAElement -Root $settings -AutomationId 'PrimaryButton' -TimeoutSeconds 3
+		if ($primaryButton) { Invoke-UIAElement -Element $primaryButton}
+		$toggleSwitch = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsDynamicRefreshRate_ToggleSwitch'
+		if ($toggleSwitch -and $toggleSwitch.Current.IsEnabled) {
+			try {
+				$togglePattern = $null
+				if ($toggleSwitch.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+					if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+						$togglePattern.Toggle()
+						Start-Sleep -Milliseconds 500
+					}
+				}
+			} catch { Write-ProgressLog "Dynamic refresh toggle failed: $_" 'WARN' }
+		}
+		Close-SettingsWindow -Window $settings
 	}
-	$toggleSwitch = Get-UIAElement -Root $settingsWindow -AutomationId 'SystemSettings_Display_BlueLight_AutomaticOnSchedule_ToggleSwitch'
-	if ($toggleSwitch) {
-		try {
-			$toggleSwitch.SetFocus(); Start-Sleep -Milliseconds 100; $togglePattern = $null; if ($toggleSwitch.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern,[ref]$togglePattern)) { $togglePattern.Toggle() } else { [System.Windows.Forms.SendKeys]::SendWait(' ') }
-		} catch { Write-ProgressLog "Night light toggle failed: $_" 'WARN' }
-	}
-	Start-Sleep -Seconds 1
-	Close-SettingsWindow -Window $settingsWindow
 }
 
 # Execution order ------------------------------------------------------
 try {
 	Invoke-MinimizeAllWindows
 	Set-WindowsTheme
-	# Set-PrivacySettings
-	# Set-RegistryTweaks
-	# Install-WingetPackages
-	# Set-PowerSleepPolicy
-	# Set-VSCodeContext
-	# Set-PowerToysConfig
-	# Set-StartupApps
-	# Close-SettingsWindow -Window (Get-UIAElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Name 'Settings' -TimeoutSeconds 2)
-	# Set-DynamicRefresh
-	# Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
-	# Set-NightLight
-	# Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
-	# Write-ProgressLog "Setup complete" 'DONE'
-
-    # Wait for user confirmation before closing
-    Write-Host "Press enter to exit..."
-    Read-Host
+	Set-PrivacySettings
+	Set-RegistryTweaks
+	Install-WingetPackages
+	Set-PowerSleepPolicy
+	Set-VSCodeContext
+	Set-PowerToysConfig
+	Set-StartupApps
+	Close-SettingsWindow -Window (Get-UIAElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Name 'Settings' -TimeoutSeconds 2)
+	Set-LocationServices
+	Set-DateTime
+	Set-DynamicRefresh
+	Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
+	Set-NightLight
+	Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
+	Write-ProgressLog "Setup complete" 'DONE'
 } catch {
 	Write-ProgressLog "Setup halted: $_" 'ERROR'
-	throw
 }
+
+# Wait for user confirmation before closing
+Write-Host "Press enter to exit..."
+Read-Host
