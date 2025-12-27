@@ -942,6 +942,37 @@ function Set-PowerToysConfig {
 	if (Test-Path $exePath) { Start-Process -FilePath $exePath } else { Write-ProgressLog 'PowerToys.exe not found' 'WARN' }
 }
 
+function Disable-StartMenuSuggestions {
+	Write-ProgressLog "Disabling Start Menu suggestions"
+	
+	try {
+		# Disable Iris Recommendations in Start Menu
+		$path1 = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+		if (-not (Test-Path $path1)) {
+			New-Item -Path $path1 -Force | Out-Null
+		}
+		Set-ItemProperty -Path $path1 -Name "Start_IrisRecommendations" -Value 0 -Type DWord -Force
+		
+		# Hide Recommended Personalized Sites (HKCU)
+		$path2 = "HKCU:\Software\Policies\Microsoft\Windows\Explorer"
+		if (-not (Test-Path $path2)) {
+			New-Item -Path $path2 -Force | Out-Null
+		}
+		Set-ItemProperty -Path $path2 -Name "HideRecommendedPersonalizedSites" -Value 1 -Type DWord -Force
+		Set-ItemProperty -Path $path2 -Name "DisableSearchBoxSuggestions" -Value 1 -Type DWord -Force
+		
+		# Hide Recommended Personalized Sites (HKLM - requires admin)
+		$path3 = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
+		if (-not (Test-Path $path3)) {
+			New-Item -Path $path3 -Force | Out-Null
+		}
+		Set-ItemProperty -Path $path3 -Name "HideRecommendedPersonalizedSites" -Value 1 -Type DWord -Force
+		
+	} catch {
+		Write-ProgressLog "Failed to disable Start Menu suggestions: $_" 'WARN'
+	}
+}
+
 function Set-StartupApps {
 	Write-ProgressLog "Disabling startup applications"
 	function Set-RegistryValueLocal {
@@ -1081,6 +1112,7 @@ try {
 	Set-VSCodeContext
 	Set-PowerToysConfig
 	Set-StartupApps
+	Disable-StartMenuSuggestions
 	Close-SettingsWindow -Window (Get-UIAElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Name 'Settings' -TimeoutSeconds 2)
 	Set-LocationServices
 	Set-DateTime
