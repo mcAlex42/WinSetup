@@ -164,95 +164,88 @@ function Set-LockScreen {
     New-Item -Path $personalizationCspMachine -Force | Out-Null
 
     # Turn off Windows Spotlight and lock screen tips
-    Set-ItemProperty -Path $cdmPath -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord
-    Set-ItemProperty -Path $cdmPath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord
-    Set-ItemProperty -Path $cdmPath -Name $cdmSubscriptionFlag -Value 0 -Type DWord
-    Set-ItemProperty -Path $creativePath -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord
-    Set-ItemProperty -Path $creativePath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $cdmPath -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $cdmPath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $cdmPath -Name $cdmSubscriptionFlag -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $creativePath -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $creativePath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord
 
     # Enforce picture lock screen and supply the image path
-    Set-ItemProperty -Path $personalizationPolicy -Name "LockScreenImage" -Value $lockScreenImage -Type String
-    Set-ItemProperty -Path $personalizationPolicyUser -Name "LockScreenImage" -Value $lockScreenImage -Type String
-    Set-ItemProperty -Path $personalizationPolicy -Name "NoLockScreenSlideshow" -Value 1 -Type DWord
-    Set-ItemProperty -Path $personalizationPolicyUser -Name "NoLockScreenSlideshow" -Value 1 -Type DWord
-    Set-ItemProperty -Path $cloudPolicy -Name "DisableWindowsSpotlightOnLockScreen" -Value 1 -Type DWord
-    Set-ItemProperty -Path $cloudPolicy -Name "DisableWindowsSpotlightFeatures" -Value 1 -Type DWord
+    Set-RegistryValueSafe -Path $personalizationPolicy -Name "LockScreenImage" -Value $lockScreenImage -Type String
+    Set-RegistryValueSafe -Path $personalizationPolicyUser -Name "LockScreenImage" -Value $lockScreenImage -Type String
+    Set-RegistryValueSafe -Path $personalizationPolicy -Name "NoLockScreenSlideshow" -Value 1 -Type DWord
+    Set-RegistryValueSafe -Path $personalizationPolicyUser -Name "NoLockScreenSlideshow" -Value 1 -Type DWord
+    Set-RegistryValueSafe -Path $cloudPolicy -Name "DisableWindowsSpotlightOnLockScreen" -Value 1 -Type DWord
+    Set-RegistryValueSafe -Path $cloudPolicy -Name "DisableWindowsSpotlightFeatures" -Value 1 -Type DWord
 
     # Mirror path in user-scoped personalization to nudge shell to reload
-    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImagePath" -Value $lockScreenImage -Type String
-    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImageUrl" -Value $lockScreenImage -Type String
-    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImageStatus" -Value 1 -Type DWord
-    Set-ItemProperty -Path $personalizationCsp -Name "LockScreenImageOptions" -Value 0 -Type DWord
-    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImagePath" -Value $lockScreenImage -Type String
-    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImageUrl" -Value $lockScreenImage -Type String
-    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImageStatus" -Value 1 -Type DWord
-    Set-ItemProperty -Path $personalizationCspMachine -Name "LockScreenImageOptions" -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $personalizationCsp -Name "LockScreenImagePath" -Value $lockScreenImage -Type String
+    Set-RegistryValueSafe -Path $personalizationCsp -Name "LockScreenImageUrl" -Value $lockScreenImage -Type String
+    Set-RegistryValueSafe -Path $personalizationCsp -Name "LockScreenImageStatus" -Value 1 -Type DWord
+    Set-RegistryValueSafe -Path $personalizationCsp -Name "LockScreenImageOptions" -Value 0 -Type DWord
+    Set-RegistryValueSafe -Path $personalizationCspMachine -Name "LockScreenImagePath" -Value $lockScreenImage -Type String
+    Set-RegistryValueSafe -Path $personalizationCspMachine -Name "LockScreenImageUrl" -Value $lockScreenImage -Type String
+    Set-RegistryValueSafe -Path $personalizationCspMachine -Name "LockScreenImageStatus" -Value 1 -Type DWord
+    Set-RegistryValueSafe -Path $personalizationCspMachine -Name "LockScreenImageOptions" -Value 0 -Type DWord
 
     & rundll32.exe user32.dll,UpdatePerUserSystemParameters 1, True | Out-Null
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 }
 
 function Set-WindowsTheme {
+    Write-ProgressLog "Setting windows theme"
 
-	Write-ProgressLog "Setting windows theme"
-
-    # Values captured from the SystemSettings trace
-    $accentColor = 4292114432
-    $startColorMenu = 4290799360
-    $colorizationColor = 3288365268
-    $colorizationColorBalance = 89
-    $colorizationAfterglowBalance = 10
-    $colorizationBlurBalance = 1
-    $accentPalette = [byte[]](0x99,0xEB,0xFF,0x00,0x4C,0xC2,0xFF,0x00,0x00,0x91,0xF8,0x00,0x00,0x78,0xD4,0x00)
+    # 1. Define Paths and Values
     $themeAPath = Join-Path $env:WINDIR "Resources\Themes\themeA.theme"
-
     $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
     $accentPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent"
     $themeHistoryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\History"
     $personalizePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
     $themesRoot = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes"
 
-    New-Item -Path $dwmPath -Force | Out-Null
-    New-Item -Path $accentPath -Force | Out-Null
-    New-Item -Path $themeHistoryPath -Force | Out-Null
-    New-Item -Path $personalizePath -Force | Out-Null
-    New-Item -Path $themesRoot -Force | Out-Null
+    $accentColor = 4292114432
+    $startColorMenu = 4290799360
+    $colorizationColor = 3288365268
+    $accentPalette = [byte[]](0x99,0xEB,0xFF,0x00,0x4C,0xC2,0xFF,0x00,0x00,0x91,0xF8,0x00,0x00,0x78,0xD4,0x00)
 
-    # Apply Glow (ThemeA) before other tweaks
+    # 2. Apply the Theme File First
     if (Test-Path $themeAPath) {
         Start-Process -FilePath $themeAPath -Wait
-        Set-ItemProperty -Path $themesRoot -Name "CurrentTheme" -Value $themeAPath -Type String
-        Set-ItemProperty -Path $themesRoot -Name "ThemeMRU" -Value "$themeAPath;" -Type String
+        Start-Sleep -Milliseconds 200
+        
+        Set-RegistryValueSafe -Path $themesRoot -Name "CurrentTheme" -Value $themeAPath -Type String
+        Set-RegistryValueSafe -Path $themesRoot -Name "ThemeMRU" -Value "$themeAPath;" -Type String
     } else {
         Write-Warning "Theme file not found: $themeAPath"
     }
 
-    Set-ItemProperty -Path $dwmPath -Name "AccentColor" -Value $accentColor -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorizationColor" -Value $colorizationColor -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorizationColorBalance" -Value $colorizationColorBalance -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorizationAfterglow" -Value $colorizationColor -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorizationAfterglowBalance" -Value $colorizationAfterglowBalance -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorizationBlurBalance" -Value $colorizationBlurBalance -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "EnableWindowColorization" -Value 1 -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorizationGlassAttribute" -Value 1 -Type DWord
+    # 3. Apply Custom Registry Tweaks (Overrides theme defaults)
+    Set-RegistryValueSafe -Path $themeHistoryPath -Name "AutoColor" -Value 0 -Type DWord
 
-    Set-ItemProperty -Path $accentPath -Name "AccentColorMenu" -Value $accentColor -Type DWord
-    Set-ItemProperty -Path $accentPath -Name "StartColorMenu" -Value $startColorMenu -Type DWord
-    Set-ItemProperty -Path $accentPath -Name "AccentPalette" -Value $accentPalette -Type Binary
+    # DWM (Desktop Window Manager) tweaks
+    Set-RegistryValueSafe -Path $dwmPath -Name "AccentColor" -Value $accentColor
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorizationColor" -Value $colorizationColor
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorizationColorBalance" -Value 89
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorizationAfterglow" -Value $colorizationColor
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorizationAfterglowBalance" -Value 10
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorizationBlurBalance" -Value 1
+    Set-RegistryValueSafe -Path $dwmPath -Name "EnableWindowColorization" -Value 1
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorizationGlassAttribute" -Value 1
+    Set-RegistryValueSafe -Path $dwmPath -Name "ColorPrevalence" -Value 0
 
-    Set-ItemProperty -Path $themeHistoryPath -Name "AutoColor" -Value 0 -Type DWord
+    # Accent and Menu tweaks
+    Set-RegistryValueSafe -Path $accentPath -Name "AccentColorMenu" -Value $accentColor
+    Set-RegistryValueSafe -Path $accentPath -Name "StartColorMenu" -Value $startColorMenu
+    Set-RegistryValueSafe -Path $accentPath -Name "AccentPalette" -Value $accentPalette -Type Binary
 
-    # Keep Start menu, taskbar, and title bars using system defaults
-    Set-ItemProperty -Path $personalizePath -Name "ColorPrevalence" -Value 0 -Type DWord
-    Set-ItemProperty -Path $dwmPath -Name "ColorPrevalence" -Value 0 -Type DWord
-
-    # Force dark mode for system and apps
-    Set-ItemProperty -Path $personalizePath -Name "AppsUseLightTheme" -Value 0 -Type DWord
-    Set-ItemProperty -Path $personalizePath -Name "SystemUsesLightTheme" -Value 0 -Type DWord
+    # Dark Mode and Personalization
+    Set-RegistryValueSafe -Path $personalizePath -Name "ColorPrevalence" -Value 0
+    Set-RegistryValueSafe -Path $personalizePath -Name "AppsUseLightTheme" -Value 0
+    Set-RegistryValueSafe -Path $personalizePath -Name "SystemUsesLightTheme" -Value 0
 
     Set-LockScreen
 
-    # Nudge the shell to apply the new accent without requiring a sign-out
+    # 4. Refresh Shell
     & rundll32.exe user32.dll,UpdatePerUserSystemParameters 1, True | Out-Null
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Stop-Process -Name 'SystemSettings' -Force -ErrorAction SilentlyContinue
@@ -609,7 +602,7 @@ function Set-RegistryTweaks {
 	# Alt+Tab tabs off
 	Set-RegistryValueSafe -Path $ExplorerAdvanced -Name 'MultiTaskingAltTabFilter' -Value 3
 	# Taskbar auto-hide
-	try { &{ $p='HKCU:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3';$v=(Get-ItemProperty -Path $p).Settings;$v[8]=3;&Set-ItemProperty -Path $p -Name Settings -Value $v;&Stop-Process -f -ProcessName explorer } } catch { Write-ProgressLog "Taskbar auto-hide failed: $_" 'WARN' }
+	try { &{ $p='HKCU:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3';$v=(Get-ItemProperty -Path $p).Settings;$v[8]=3;&Set-RegistryValueSafe -Path $p -Name Settings -Value $v;&Stop-Process -f -ProcessName explorer } } catch { Write-ProgressLog "Taskbar auto-hide failed: $_" 'WARN' }
 	# End task on taskbar
 	Set-RegistryValueSafe -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' -Name 'TaskbarEndTask' -Value 1
 	# Disable Recall via DISM
@@ -750,96 +743,90 @@ function Set-RegistryTweaks {
 
 function Set-PowerSleepPolicy {
 
-    function Test-PowerCfgSetting {
-        param(
-            [string]$Scheme,
-            [string]$SubGroup,
-            [string]$Setting
-        )
+	function Get-PowerGUIDMap {
+		Write-ProgressLog "Mapping system power GUIDs..."
+		$map = @{ Subgroups = @{}; Settings = @{} }
+		
+		# /QH ensures we see everything, even if the manufacturer tried to hide it
+		$output = powercfg /qh
+		
+		foreach ($line in $output) {
+			if ($line -match 'Subgroup GUID:\s+([a-f0-9-]+)\s+\((.+)\)') {
+				$map.Subgroups[$matches[2].Trim()] = $matches[1]
+			}
+			elseif ($line -match 'Power Setting GUID:\s+([a-f0-9-]+)\s+\((.+)\)') {
+				$map.Settings[$matches[2].Trim()] = $matches[1]
+			}
+		}
+		return $map
+	}
 
-        try {
-            $result = powercfg /query $Scheme $SubGroup $Setting 2>&1
-            return $LASTEXITCODE -eq 0
-        }
-        catch {
-            return $false
+    # 1. Ensure Hibernate is enabled and ready
+    powercfg /hibernate on
+    powercfg /h /type full
+
+    # 2. Map current system GUIDs
+    $PowerMap = Get-PowerGUIDMap
+    $activeScheme = (powercfg /getactivescheme).Split()[3]
+    Write-ProgressLog "Targeting Active Scheme: $activeScheme"
+
+    # 3. Define the friendly names we are looking for
+    # (Matches standard Windows 10/11 naming conventions)
+    $sub_video_name   = "Display"
+    $sub_sleep_name   = "Sleep"
+    $sub_buttons_name = "Power buttons and lid"
+
+    $set_display_name = "Turn off display after"
+    $set_sleep_name   = "Sleep after"
+    $set_hiber_name   = "Hibernate after"
+    $set_pwrbtn_name  = "Power button action"
+    $set_slpbtn_name  = "Sleep button action"
+    $set_lid_name     = "Lid close action"
+
+    # Helper to set values only if the GUID was successfully found
+    $SetVal = {
+        param($Mode, $SubName, $SetName, $Value)
+        $subGuid = $PowerMap.Subgroups[$SubName]
+        $setGuid = $PowerMap.Settings[$SetName]
+
+        if ($subGuid -and $setGuid) {
+            if ($Mode -eq "AC") {
+                powercfg /setacvalueindex $activeScheme $subGuid $setGuid $Value
+            } else {
+                powercfg /setdcvalueindex $activeScheme $subGuid $setGuid $Value
+            }
+        } else {
+            Write-ProgressLog "Warning: Could not find GUID for '$SetName' under '$SubName'" -Level "WARN"
         }
     }
 
-    function Set-PowerCfgPair {
-        param(
-            [string]$Scheme,
-            [string]$SubGroup,
-            [string]$Setting,
-            [int]$AcValue,
-            [int]$DcValue,
-            [string]$Label
-        )
+    Write-ProgressLog "Applying Timeouts..."
+    # Display: 2m (120s)
+    &$SetVal "AC" $sub_video_name $set_display_name 120
+    &$SetVal "DC" $sub_video_name $set_display_name 120
 
-        Write-ProgressLog "  - $Label..." -NoNewline
-        if (-not (Test-PowerCfgSetting -Scheme $Scheme -SubGroup $SubGroup -Setting $Setting)) {
-            Write-ProgressLog " Skipped (setting unavailable on this device)."
-            return
-        }
+    # Sleep: Never (0s)
+    &$SetVal "AC" $sub_sleep_name $set_sleep_name 0
+    &$SetVal "DC" $sub_sleep_name $set_sleep_name 0
 
-        powercfg /setacvalueindex $Scheme $SubGroup $Setting $AcValue
-        powercfg /setdcvalueindex $Scheme $SubGroup $Setting $DcValue
-        Write-ProgressLog " Done."
-    }
+    # Hibernate: AC 10m (600s), DC 5m (300s)
+    &$SetVal "AC" $sub_sleep_name $set_hiber_name 600
+    &$SetVal "DC" $sub_sleep_name $set_hiber_name 300
 
-    Write-ProgressLog "Setting power and sleep policies"
+    Write-ProgressLog "Applying Button Actions..."
+    # Actions: 0=Nothing, 1=Sleep, 2=Hibernate
+    &$SetVal "AC" $sub_buttons_name $set_pwrbtn_name 2
+    &$SetVal "DC" $sub_buttons_name $set_pwrbtn_name 2
 
-    # Universal GUIDs (Constants across Windows)
-    $SUB_SLEEP     = "238c9fa8-0aad-41ed-83f4-97be242c8f20"
-    $SLEEP_IDLE    = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da" # Sleep after
-    $HIBERNATE_IDLE = "9d7815a6-7ee4-497e-8888-515a05f02364" # Hibernate after
-    $SUB_VIDEO     = "7516b95f-f776-4464-8c53-06167f40cc99"  # Display
-    $VIDEO_IDLE    = "3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e"  # Display off
-    
-    $SUB_BUTTONS   = "4f971e89-eebd-4455-a8de-9e59040e7347"
-    $LID_ACTION    = "5ca79f8d-77f6-4ef5-99ee-727262a32715" # Lid close
-    $PWR_ACTION    = "7648efa3-dd9c-4e3e-b566-50f929386280" # Power button
+    &$SetVal "AC" $sub_buttons_name $set_slpbtn_name 2
+    &$SetVal "DC" $sub_buttons_name $set_slpbtn_name 2
 
-    # 1. Remove Sleep from the Power Menu via Registry
-    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FlyoutMenuSettings"
-    if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
-    Set-ItemProperty -Path $regPath -Name "ShowSleepOption" -Value 0
+    &$SetVal "AC" $sub_buttons_name $set_lid_name 0
+    &$SetVal "DC" $sub_buttons_name $set_lid_name 0
 
-    # Target timeouts (seconds)
-    $displayTimeoutAc = 120   # 2 minutes
-    $sleepTimeoutAc   = 600   # 10 minutes
-    $hibernateAc      = 600   # 10 minutes
-
-    $displayTimeoutDc = 120   # 2 minutes
-    $sleepTimeoutDc   = 300   # 5 minutes
-    $hibernateDc      = 300   # 5 minutes
-
-    # 2. Get all Power Schemes
-    $schemes = powercfg /list | Select-String -Pattern 'GUID: ([\da-f-]+)' | ForEach-Object { $_.Matches.Groups[1].Value }
-
-    foreach ($scheme in $schemes) {
-        Write-Host "Processing Scheme: $scheme" -ForegroundColor Yellow
-
-        # Display off after 2 minutes on AC/DC
-        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_VIDEO -Setting $VIDEO_IDLE -AcValue $displayTimeoutAc -DcValue $displayTimeoutDc -Label "Setting display off ($displayTimeoutAc AC / $displayTimeoutDc DC)"
-
-        # Sleep after 10 minutes (AC) / 5 minutes (DC)
-        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_SLEEP -Setting $SLEEP_IDLE -AcValue $sleepTimeoutAc -DcValue $sleepTimeoutDc -Label "Setting sleep after ($sleepTimeoutAc AC / $sleepTimeoutDc DC)"
-
-        # Hibernate after 11 minutes (AC) / 6 minutes (DC)
-        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_SLEEP -Setting $HIBERNATE_IDLE -AcValue $hibernateAc -DcValue $hibernateDc -Label "Setting hibernate after ($hibernateAc AC / $hibernateDc DC)"
-
-        # Lid close: Do nothing
-        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_BUTTONS -Setting $LID_ACTION -AcValue 0 -DcValue 0 -Label "Setting Lid to 'Do Nothing'"
-
-        # Power button: Hibernate
-        Set-PowerCfgPair -Scheme $scheme -SubGroup $SUB_BUTTONS -Setting $PWR_ACTION -AcValue 2 -DcValue 2 -Label "Setting Power Button to 'Hibernate'"
-    }
-
-    # Refresh current scheme to apply changes
-    $activeScheme = (powercfg /getactivescheme) -replace ".*GUID: ([\da-f-]+).*", '$1'
+    # 4. Activate changes
     powercfg /setactive $activeScheme
-
+    Write-ProgressLog "All policies applied successfully."
 }
 
 function Install-WingetPackages {
@@ -951,22 +938,22 @@ function Disable-StartMenuSuggestions {
 		if (-not (Test-Path $path1)) {
 			New-Item -Path $path1 -Force | Out-Null
 		}
-		Set-ItemProperty -Path $path1 -Name "Start_IrisRecommendations" -Value 0 -Type DWord -Force
+		Set-RegistryValueSafe -Path $path1 -Name "Start_IrisRecommendations" -Value 0 -Type DWord -Force
 		
 		# Hide Recommended Personalized Sites (HKCU)
 		$path2 = "HKCU:\Software\Policies\Microsoft\Windows\Explorer"
 		if (-not (Test-Path $path2)) {
 			New-Item -Path $path2 -Force | Out-Null
 		}
-		Set-ItemProperty -Path $path2 -Name "HideRecommendedPersonalizedSites" -Value 1 -Type DWord -Force
-		Set-ItemProperty -Path $path2 -Name "DisableSearchBoxSuggestions" -Value 1 -Type DWord -Force
+		Set-RegistryValueSafe -Path $path2 -Name "HideRecommendedPersonalizedSites" -Value 1 -Type DWord -Force
+		Set-RegistryValueSafe -Path $path2 -Name "DisableSearchBoxSuggestions" -Value 1 -Type DWord -Force
 		
 		# Hide Recommended Personalized Sites (HKLM - requires admin)
 		$path3 = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
 		if (-not (Test-Path $path3)) {
 			New-Item -Path $path3 -Force | Out-Null
 		}
-		Set-ItemProperty -Path $path3 -Name "HideRecommendedPersonalizedSites" -Value 1 -Type DWord -Force
+		Set-RegistryValueSafe -Path $path3 -Name "HideRecommendedPersonalizedSites" -Value 1 -Type DWord -Force
 		
 	} catch {
 		Write-ProgressLog "Failed to disable Start Menu suggestions: $_" 'WARN'
@@ -1038,67 +1025,98 @@ function Set-NightLight {
 }
 
 function Set-DynamicRefresh {
-	Write-ProgressLog "Setting dynamic refresh"
-	Start-Process 'ms-settings:display'
-	$root = [System.Windows.Automation.AutomationElement]::RootElement
-	$settings = Get-UIAElement -Root $root -Name "Settings"
-	if ($settings) {
-		$advContainer = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettings_ButtonEntityItem'
-		if ($advContainer) {
-			try { ($advContainer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)).ScrollIntoView() } catch {}
-			$buttonCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)
-			$childButton = $advContainer.FindFirst([System.Windows.Automation.TreeScope]::Children,$buttonCondition)
-			if ($childButton) { Invoke-UIAElement -Element $childButton } else { try { $advContainer.SetFocus(); [System.Windows.Forms.SendKeys]::SendWait('{TAB}'); [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') } catch {} }
-		} else { Write-ProgressLog "Advanced Display container not found" 'WARN'; Close-SettingsWindow -Window $settings; return }
-		
-		$comboBox = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsRefreshRate_ComboBox'
-		if ($comboBox) {
-			try {
-				$expandPattern = $null
-				if ($comboBox.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$expandPattern)) {
-					$expandPattern.Expand()
-					Start-Sleep -Milliseconds 500
-					$listItems = $comboBox.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::ListItem }
-					if ($listItems.Count -gt 0) {
-						$highestItem = $null
-						$highestValue = -1
-						foreach ($item in $listItems) {
-							if ($item.Current.Name -match '(\d+(\.\d+)?)') {
-								$val = [double]$matches[1]
-								if ($val -gt $highestValue) {
-									$highestValue = $val
-									$highestItem = $item
-								}
-							}
-						}
-						if ($highestItem) {
-							Write-ProgressLog "Selecting refresh rate: $($highestItem.Current.Name)"
-							$selectPattern = $null
-							if ($highestItem.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selectPattern)) {
-								$selectPattern.Select()
-								Start-Sleep -Milliseconds 500
-							}
-						}
-					}
-				}
-			} catch { Write-ProgressLog "Refresh combo interaction failed: $_" 'WARN' }
-		}
-		$primaryButton = Get-UIAElement -Root $settings -AutomationId 'PrimaryButton' -TimeoutSeconds 3
-		if ($primaryButton) { Invoke-UIAElement -Element $primaryButton}
-		$toggleSwitch = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsDynamicRefreshRate_ToggleSwitch'
-		if ($toggleSwitch -and $toggleSwitch.Current.IsEnabled) {
-			try {
-				$togglePattern = $null
-				if ($toggleSwitch.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
-					if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
-						$togglePattern.Toggle()
-						Start-Sleep -Milliseconds 500
-					}
-				}
-			} catch { Write-ProgressLog "Dynamic refresh toggle failed: $_" 'WARN' }
-		}
-		Close-SettingsWindow -Window $settings
-	}
+    Write-ProgressLog "Setting dynamic refresh"
+    Start-Process 'ms-settings:display'
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $settings = Get-UIAElement -Root $root -Name "Settings"
+    
+    if ($settings) {
+        # 1. Navigate to Advanced Display
+        $advContainer = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettings_ButtonEntityItem'
+        if ($advContainer) {
+            try { ($advContainer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)).ScrollIntoView() } catch {}
+            $buttonCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)
+            $childButton = $advContainer.FindFirst([System.Windows.Automation.TreeScope]::Children,$buttonCondition)
+            if ($childButton) { Invoke-UIAElement -Element $childButton } else { try { $advContainer.SetFocus(); [System.Windows.Forms.SendKeys]::SendWait('{TAB}'); [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') } catch {} }
+        } else { 
+            Write-ProgressLog "Advanced Display container not found" 'WARN'
+            Close-SettingsWindow -Window $settings
+            return 
+        }
+        
+        # 2. Find and Expand the Refresh Rate ComboBox
+        $comboBox = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsRefreshRate_ComboBox'
+        if ($comboBox) {
+            try {
+                $expandPattern = $null
+                if ($comboBox.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$expandPattern)) {
+                    $expandPattern.Expand()
+                    Start-Sleep -Milliseconds 800 # Give UI time to populate items
+                    
+                    # Fetch list items
+                    $listItems = $comboBox.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | 
+                                 Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::ListItem }
+                    
+                    if ($listItems.Count -le 1) {
+                        Write-ProgressLog "Only $($listItems.Count) refresh rate option(s) found. No selection necessary."
+                        Close-SettingsWindow -Window $settings
+                        return
+                    }
+                    Write-ProgressLog "Found $($listItems.Count) refresh rates. Selecting highest..."
+
+                    # 3. Find and select the highest refresh rate
+                    $highestItem = $null
+                    $highestValue = -1
+                    foreach ($item in $listItems) {
+                        if ($item.Current.Name -match '(\d+(\.\d+)?)') {
+                            $val = [double]$matches[1]
+                            if ($val -gt $highestValue) {
+                                $highestValue = $val
+                                $highestItem = $item
+                            }
+                        }
+                    }
+                    if ($highestItem) {
+                        Write-ProgressLog "Selecting refresh rate: $($highestItem.Current.Name)"
+                        $selectPattern = $null
+                        if ($highestItem.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selectPattern)) {
+                            $selectPattern.Select()
+                            Start-Sleep -Milliseconds 800
+                        }
+                    }
+                }
+            } catch { 
+                Write-ProgressLog "Refresh combo interaction failed: $_" 'WARN' 
+            }
+        }
+
+        # 4. Handle "Keep changes" prompt if it appears
+        $primaryButton = Get-UIAElement -Root $settings -AutomationId 'PrimaryButton' -TimeoutSeconds 3
+        if ($primaryButton) { 
+            Write-ProgressLog "Confirming refresh rate change..."
+            Invoke-UIAElement -Element $primaryButton
+            Start-Sleep -Milliseconds 500
+        }
+
+        # 5. Handle Dynamic Refresh Toggle
+        $toggleSwitch = Get-UIAElement -Root $settings -AutomationId 'SystemSettings_Display_AdvancedDisplaySettingsDynamicRefreshRate_ToggleSwitch'
+        if ($toggleSwitch -and $toggleSwitch.Current.IsEnabled) {
+            try {
+                $togglePattern = $null
+                if ($toggleSwitch.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+                    if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+                        Write-ProgressLog "Enabling Dynamic Refresh Rate toggle..."
+                        $togglePattern.Toggle()
+                        Start-Sleep -Milliseconds 500
+                    }
+                }
+            } catch { 
+                Write-ProgressLog "Dynamic refresh toggle failed: $_" 'WARN' 
+            }
+        }
+        
+        Close-SettingsWindow -Window $settings
+    }
 }
 
 # Execution order ------------------------------------------------------
