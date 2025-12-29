@@ -832,7 +832,7 @@ function Set-PowerSleepPolicy {
 function Install-WingetPackages {
 	Write-ProgressLog "Installing winget packages"
 	Test-WingetAvailable
-	$packages = @('Microsoft.Office','Microsoft.VisualStudioCode','voidtools.Everything','9NKSQGP7F2NH','Canva.Affinity','Microsoft.Git','Python.Python.3.12','LocalSend.LocalSend','Wondershare.PDFelement.10','Microsoft.PowerToys','AdGuard.AdGuard')
+	$packages = @('Microsoft.Office','Microsoft.VisualStudioCode','voidtools.Everything','9NKSQGP7F2NH','Canva.Affinity','Microsoft.Git','Python.Python.3.12','LocalSend.LocalSend', 'namazso.SecureUXTheme', 'Wondershare.PDFelement.10','Microsoft.PowerToys','AdGuard.AdGuard')
 	if ($PSVersionTable.PSVersion.Major -ge 7) {
 		$packages | ForEach-Object -Parallel {
 			winget install -e --id $_ --accept-package-agreements --accept-source-agreements
@@ -844,6 +844,8 @@ function Install-WingetPackages {
 		}
 		Wait-JobWithOutput -Jobs $jobs
 	}
+
+	Invoke-MinimizeAllWindows
 }
 
 function Set-VSCodeContext {
