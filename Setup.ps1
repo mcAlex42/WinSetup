@@ -1197,15 +1197,18 @@ function Install-RemoteInstaller {
 # --- Installer URLs ---
 $cursorInstallerUrl = "https://github.com/mcAlex42/WinSetup/raw/refs/heads/main/Installers/CursorInstall.exe"
 $themeInstallerUrl = "https://github.com/mcAlex42/WinSetup/raw/refs/heads/main/Installers/ThemeInstaller.exe"
+$darktitleInstallerUrl = "https://github.com/mcAlex42/WinSetup/raw/refs/heads/main/Installers/DarkTitleInstall.exe"
 
 # Execution order ------------------------------------------------------
 try {
 	Invoke-MinimizeAllWindows
 	Set-WindowsTheme
-	Write-ProgressLog "Downloading custom cursor..."
+	Write-ProgressLog "Setting custom cursor..."
 	Install-RemoteInstaller -Url $cursorInstallerUrl
-	Write-ProgressLog "Downloading custom theme..."
+	Write-ProgressLog "Setting custom theme..."
 	Install-RemoteInstaller -Url $themeInstallerUrl
+	Write-ProgressLog "Setting dark title bars..."
+	Install-RemoteInstaller -Url $darktitleInstallerUrl
 	Set-PrivacySettings
 	Set-RegistryTweaks
 	Install-WingetPackages
