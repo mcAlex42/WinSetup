@@ -602,7 +602,7 @@ function Set-RegistryTweaks {
 	# Alt+Tab tabs off
 	Set-RegistryValueSafe -Path $ExplorerAdvanced -Name 'MultiTaskingAltTabFilter' -Value 3
 	# Taskbar auto-hide
-	try { &{ $p='HKCU:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3';$v=(Get-ItemProperty -Path $p).Settings;$v[8]=3;&Set-RegistryValueSafe -Path $p -Name Settings -Value $v;&Stop-Process -f -ProcessName explorer } } catch { Write-ProgressLog "Taskbar auto-hide failed: $_" 'WARN' }
+	try { &{ $p='HKCU:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3';$v=(Get-ItemProperty -Path $p).Settings;$v[8]=3;&Set-RegistryValueSafe -Path $p -Name Settings -Value $v -Type Binary;&Stop-Process -f -ProcessName explorer } } catch { Write-ProgressLog "Taskbar auto-hide failed: $_" 'WARN' }
 	# End task on taskbar
 	Set-RegistryValueSafe -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' -Name 'TaskbarEndTask' -Value 1
 	# Disable Recall via DISM
@@ -899,12 +899,15 @@ function Set-PowerToysConfig {
 	$globalBackup   = "$ptSettingsDir\backup.json"
 	$qaSettingsDir  = "$ptSettingsDir\QuickAccent"
 	$qaSettingsPath = "$qaSettingsDir\settings.json"
+	$kmSettingsDir  = "$ptSettingsDir\Keyboard Manager"
+	$kmSettingsPath = "$kmSettingsDir\default.json"
 	$exePath        = "$env:LOCALAPPDATA\PowerToys\PowerToys.exe"
 	taskkill /F /IM PowerToys* /T 2>$null
 	Start-Sleep -Seconds 3
 	if (Test-Path $globalSettings) {
 		$json = Get-Content -Path $globalSettings -Raw | ConvertFrom-Json
 		$json.enabled.QuickAccent = $true
+		$json.enabled."Keyboard Manager" = $true
 		$json.enabled.CmdPal = $false
 		Save-PTJson $globalSettings $json
 		if (Test-Path $globalBackup) { Save-PTJson $globalBackup $json }
@@ -926,6 +929,30 @@ function Set-PowerToysConfig {
 		version = '1.0'
 	}
 	Save-PTJson $qaSettingsPath $qaConfig
+	if (!(Test-Path $kmSettingsDir)) { New-Item -ItemType Directory -Path $kmSettingsDir | Out-Null }
+	$kmConfig = @{
+		remapKeys = @{ inProcess = @() }
+		remapKeysToText = @{ inProcess = @() }
+		remapShortcuts = @{
+			global = @(
+				@{
+					originalKeys = "162;160;68"
+					exactMatch = $false
+					runProgramElevationLevel = 0
+					operationType = 1
+					runProgramAlreadyRunningAction = 0
+					runProgramStartWindowType = 1
+					runProgramFilePath = "C:\Windows\System32\cmd.exe"
+					runProgramArgs = "/c powershell -ExecutionPolicy Bypass -File C:\Windows\Resources\Themes\ToggleTheme.ps1"
+					runProgramStartInDir = ""
+					unicodeText = "*Unsupported*"
+				}
+			)
+			appSpecific = @()
+		}
+		remapShortcutsToText = @{ global = @(); appSpecific = @() }
+	}
+	Save-PTJson $kmSettingsPath $kmConfig
 	if (Test-Path $exePath) { Start-Process -FilePath $exePath } else { Write-ProgressLog 'PowerToys.exe not found' 'WARN' }
 }
 
@@ -1119,10 +1146,64 @@ function Set-DynamicRefresh {
     }
 }
 
+function Install-RemoteInstaller {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Url
+    )
+
+    # 1. Prepare file path
+    $fileName = Split-Path -Leaf $Url
+    $tempPath = Join-Path -Path $env:TEMP -ChildPath $fileName
+
+    # Store original preference to restore it later
+    $originalPreference = $ProgressPreference
+
+    try {
+        # 2. Disable progress bar for speed
+        $ProgressPreference = 'SilentlyContinue'
+        Start-BitsTransfer -Source $Url -Destination $tempPath -Description "Downloading $fileName" -Priority High
+        
+        # Restore preference immediately after download
+        $ProgressPreference = $originalPreference
+        Write-ProgressLog "Download completed: $tempPath"
+
+        # 3. Execute the installer
+        if (Test-Path $tempPath) {
+            Write-ProgressLog "Executing installer..."
+            $process = Start-Process -FilePath $tempPath -Wait -PassThru
+            Write-ProgressLog "Installation process finished with exit code: $($process.ExitCode)"
+        }
+        else {
+            throw "File not found at $tempPath after download."
+        }
+    }
+    catch {
+        Write-ProgressLog "An error occurred: $_" "ERROR"
+    }
+    finally {
+        # Restore preference in case of early crash
+        $ProgressPreference = $originalPreference
+        
+        # 4. Cleanup
+        if (Test-Path $tempPath) {
+            Remove-Item -Path $tempPath -Force
+        }
+    }
+}
+
+# --- Installer URLs ---
+$cursorInstallerUrl = "https://github.com/mcAlex42/WinSetup/raw/refs/heads/main/Installers/CursorInstall.exe"
+$themeInstallerUrl = "https://github.com/mcAlex42/WinSetup/raw/refs/heads/main/Installers/ThemeInstaller.exe"
+
 # Execution order ------------------------------------------------------
 try {
 	Invoke-MinimizeAllWindows
 	Set-WindowsTheme
+	Write-ProgressLog "Downloading custom cursor..."
+	Install-RemoteInstaller -Url $cursorInstallerUrl
+	Write-ProgressLog "Downloading custom theme..."
+	Install-RemoteInstaller -Url $themeInstallerUrl
 	Set-PrivacySettings
 	Set-RegistryTweaks
 	Install-WingetPackages
