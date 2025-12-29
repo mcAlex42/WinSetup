@@ -1012,6 +1012,96 @@ function Disable-StartMenuSuggestions {
 	}
 }
 
+function Get-AndLockFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Url,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DestinationPath
+    )
+
+    process {
+        try {
+            $oldPreference = $ProgressPreference
+            $ProgressPreference = 'SilentlyContinue'
+
+            # 1. Handle existing locked files
+            if (Test-Path $DestinationPath) {
+                Write-ProgressLog "Existing file found. Skipping..."
+                return
+            }
+
+            Write-ProgressLog "Downloading file..."
+            
+            # 2. DOWNLOAD
+            Start-BitsTransfer -Source $Url -Destination $DestinationPath -ErrorAction Stop
+            $ProgressPreference = $oldPreference
+
+            # 3. GET FILE OBJECT
+            $file = Get-Item -Path $DestinationPath
+            $fullPath = $file.FullName
+
+            # 4. SET ATTRIBUTES FIRST (While we still have access)
+            Write-ProgressLog "Setting Read-Only attribute..."
+            $file.IsReadOnly = $true
+
+            # 5. CONSTRUCT ACL
+            Write-ProgressLog "Applying security lockdown..."
+            $acl = Get-Acl -Path $fullPath
+            
+            # Wipe existing/inherited permissions
+            $acl.SetAccessRuleProtection($true, $false)
+
+            # Define 'Everyone' SID (S-1-1-0)
+            $everyone = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::WorldSid, $null)
+
+            # Rule: Allow Read
+            $allowRead = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                $everyone,
+                [System.Security.AccessControl.FileSystemRights]::ReadAndExecute,
+                [System.Security.AccessControl.AccessControlType]::Allow
+            )
+            $acl.AddAccessRule($allowRead)
+
+            # Rule: Deny Write/Modify/Delete
+            $denyRights = [System.Security.AccessControl.FileSystemRights]"Write, Modify, Delete, AppendData, WriteAttributes, WriteExtendedAttributes"
+            $denyWrite = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                $everyone,
+                $denyRights,
+                [System.Security.AccessControl.AccessControlType]::Deny
+            )
+            $acl.AddAccessRule($denyWrite)
+
+            # 6. APPLY ACL LAST
+            # Once this command runs, the file is "frozen"
+            Set-Acl -Path $fullPath -AclObject $acl
+
+            Write-ProgressLog "Process Complete. File is now immutable." -Level "SUCCESS"
+        }
+        catch {
+            if ($null -ne $oldPreference) { $ProgressPreference = $oldPreference }
+            Write-Error "Failed to process file. Error: $($_.Exception.Message)"
+        }
+    }
+}
+
+function Disable-StoreSearchResults {
+    try {
+        Write-ProgressLog "Disabling Microsoft Store search results..."
+        $storeUrl = "https://github.com/mcAlex42/WinSetup/raw/refs/heads/main/Installers/store.db"
+        $storePkg = Get-AppxPackage -Name Microsoft.WindowsStore | Select-Object -First 1
+        $pfn = if ($storePkg) { $storePkg.PackageFamilyName } else { "Microsoft.WindowsStore_8wekyb3d8bbwe" }
+        $destinationPath = "$env:LOCALAPPDATA\Packages\$pfn\LocalState\store.db"
+
+        Get-AndLockFile -Url $storeUrl -DestinationPath $destinationPath
+    }
+    catch {
+        Write-ProgressLog "Failed to disable Microsoft Store search results. Error: $($_.Exception.Message)" -Level "ERROR"
+    }
+}
+
 function Set-StartupApps {
 	Write-ProgressLog "Disabling startup applications"
 	function Set-RegistryValueLocal {
@@ -1241,6 +1331,7 @@ try {
 	Set-PowerToysConfig
 	Set-StartupApps
 	Disable-StartMenuSuggestions
+	Disable-StoreSearchResults
 	Close-SettingsWindow -Window (Get-UIAElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Name 'Settings' -TimeoutSeconds 2)
 	Set-LocationServices
 	Set-DateTime
