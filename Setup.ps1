@@ -529,10 +529,33 @@ function Set-LocationServices {
 			if ($toggle.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
 				if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
 					Invoke-UIAElement -Element $toggle
-					Start-Sleep -Milliseconds 500
+					Start-Sleep -Milliseconds 200
 				}
 			}
 		}
+
+		$toggle = Get-UIAElement -Root $settings -AutomationId "SystemSettings_CapabilityAccess_Location_UserGlobal_ToggleSwitch" -Name "Let apps access your location"
+		if ($toggle) {
+			$togglePattern = $null
+			if ($toggle.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+				if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+					Invoke-UIAElement -Element $toggle
+					Start-Sleep -Milliseconds 200
+				}
+			}
+		}
+
+		$toggle = Get-UIAElement -Root $settings -AutomationId "SystemSettings_CapabilityAccess_Location_ClassicGlobal_ToggleSwitch" -Name "Let desktop apps access your location"
+		if ($toggle) {
+			$togglePattern = $null
+			if ($toggle.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
+				if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
+					Invoke-UIAElement -Element $toggle
+					Start-Sleep -Milliseconds 200
+				}
+			}
+		}
+
 		Close-SettingsWindow -Window $settings
 	}
 }
@@ -554,7 +577,7 @@ function Set-DateTime {
 				if ($toggle.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
 					if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
 						Invoke-UIAElement -Element $toggle
-						Start-Sleep -Milliseconds 500
+						Start-Sleep -Milliseconds 200
 					}
 				}
 			}
@@ -1044,7 +1067,7 @@ function Set-NightLight {
 				if ($toggleSwitch.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$togglePattern)) {
 					if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
 						$togglePattern.Toggle()
-						Start-Sleep -Milliseconds 500
+						Start-Sleep -Milliseconds 200
 					}
 				}
 			} catch { Write-ProgressLog "Night light toggle failed: $_" 'WARN' }
@@ -1124,7 +1147,7 @@ function Set-DynamicRefresh {
         if ($primaryButton) { 
             Write-ProgressLog "Confirming refresh rate change..."
             Invoke-UIAElement -Element $primaryButton
-            Start-Sleep -Milliseconds 500
+            Start-Sleep -Milliseconds 200
         }
 
         # 5. Handle Dynamic Refresh Toggle
@@ -1136,7 +1159,7 @@ function Set-DynamicRefresh {
                     if ($togglePattern.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off) {
                         Write-ProgressLog "Enabling Dynamic Refresh Rate toggle..."
                         $togglePattern.Toggle()
-                        Start-Sleep -Milliseconds 500
+                        Start-Sleep -Milliseconds 200
                     }
                 }
             } catch { 
@@ -1209,6 +1232,7 @@ try {
 	Install-RemoteInstaller -Url $themeInstallerUrl
 	Write-ProgressLog "Setting dark title bars..."
 	Install-RemoteInstaller -Url $darktitleInstallerUrl
+	Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\DarkTitle.exe" -WindowStyle Hidden
 	Set-PrivacySettings
 	Set-RegistryTweaks
 	Install-WingetPackages
