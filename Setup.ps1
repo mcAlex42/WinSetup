@@ -1027,37 +1027,50 @@ function Get-AndLockFile {
             $oldPreference = $ProgressPreference
             $ProgressPreference = 'SilentlyContinue'
 
-            # 1. Handle existing locked files
+            # --- 1. FORCE REMOVAL OF EXISTING LOCKED FILE ---
             if (Test-Path $DestinationPath) {
-                Write-ProgressLog "Existing file found. Skipping..."
-                return
+                Write-ProgressLog "Existing locked file detected. Forcing deletion..."
+                
+                # Take ownership back (necessary if 'Everyone:Deny' is in place)
+                # /F = File, /A = Give ownership to Administrators group
+                $null = takeown.exe /F $DestinationPath /A
+
+                # Grant Administrators full control and reset inheritance to wipe Deny rules
+                $null = icacls.exe $DestinationPath /reset
+                $null = icacls.exe $DestinationPath /grant "*S-1-5-32-544:F" # S-1-5-32-544 is Administrators
+
+                # Clear the Read-Only attribute
+                $existingFile = Get-Item $DestinationPath -Force
+                $existingFile.Attributes = 'Normal'
+
+                # Delete the file
+                Remove-Item -Path $DestinationPath -Force -ErrorAction Stop
+                Write-ProgressLog "Previous file removed successfully."
             }
 
+            # --- 2. DOWNLOAD NEW FILE ---
             Write-ProgressLog "Downloading file..."
-            
-            # 2. DOWNLOAD
             Start-BitsTransfer -Source $Url -Destination $DestinationPath -ErrorAction Stop
             $ProgressPreference = $oldPreference
 
-            # 3. GET FILE OBJECT
+            # --- 3. APPLY LOCKDOWN ---
             $file = Get-Item -Path $DestinationPath
             $fullPath = $file.FullName
 
-            # 4. SET ATTRIBUTES FIRST (While we still have access)
+            # Set Read-Only attribute (Do this BEFORE applying the Deny ACL)
             Write-ProgressLog "Setting Read-Only attribute..."
             $file.IsReadOnly = $true
 
-            # 5. CONSTRUCT ACL
-            Write-ProgressLog "Applying security lockdown..."
+            Write-ProgressLog "Applying security lockdown (Deny Write)..."
             $acl = Get-Acl -Path $fullPath
             
-            # Wipe existing/inherited permissions
+            # Disable inheritance and remove all existing rules ($true, $false)
             $acl.SetAccessRuleProtection($true, $false)
 
             # Define 'Everyone' SID (S-1-1-0)
             $everyone = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::WorldSid, $null)
 
-            # Rule: Allow Read
+            # Rule: Allow Read (Required so the system can still use the file)
             $allowRead = New-Object System.Security.AccessControl.FileSystemAccessRule(
                 $everyone,
                 [System.Security.AccessControl.FileSystemRights]::ReadAndExecute,
@@ -1065,8 +1078,9 @@ function Get-AndLockFile {
             )
             $acl.AddAccessRule($allowRead)
 
-            # Rule: Deny Write/Modify/Delete
-            $denyRights = [System.Security.AccessControl.FileSystemRights]"Write, Modify, Delete, AppendData, WriteAttributes, WriteExtendedAttributes"
+            # Rule: Deny Write, Modify, Delete, and Attribute changes
+            # This prevents any principal (even System/Admin) from changing the file
+            $denyRights = [System.Security.AccessControl.FileSystemRights]"Write, Modify, Delete, AppendData, WriteAttributes, WriteExtendedAttributes, DeleteSubdirectoriesAndFiles"
             $denyWrite = New-Object System.Security.AccessControl.FileSystemAccessRule(
                 $everyone,
                 $denyRights,
@@ -1074,8 +1088,7 @@ function Get-AndLockFile {
             )
             $acl.AddAccessRule($denyWrite)
 
-            # 6. APPLY ACL LAST
-            # Once this command runs, the file is "frozen"
+            # Apply the finished ACL
             Set-Acl -Path $fullPath -AclObject $acl
 
             Write-ProgressLog "Process Complete. File is now immutable." -Level "SUCCESS"
