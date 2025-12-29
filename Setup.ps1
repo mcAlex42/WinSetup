@@ -764,6 +764,13 @@ function Set-RegistryTweaks {
 	}
 }
 
+function Set-ThemeAccess {
+	$acl = Get-Acl "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+	$rule = New-Object System.Security.AccessControl.RegistryAccessRule ("ALL APPLICATION PACKAGES","ReadKey","Allow")
+	$acl.SetAccessRule($rule)
+	Set-Acl "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" $acl
+}
+
 function Set-PowerSleepPolicy {
 
 	function Get-PowerGUIDMap {
@@ -1338,6 +1345,7 @@ try {
 	Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\DarkTitle.exe" -WindowStyle Hidden
 	Set-PrivacySettings
 	Set-RegistryTweaks
+	Set-ThemeAccess
 	Install-WingetPackages
 	Set-PowerSleepPolicy
 	Set-VSCodeContext
